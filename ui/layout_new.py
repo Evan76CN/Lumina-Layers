@@ -42,7 +42,18 @@ from .callbacks import (
     on_extractor_click,
     on_extractor_clear,
     on_lut_select,
-    on_lut_upload_save
+    on_lut_upload_save,
+    on_apply_color_replacement,
+    on_clear_color_replacements,
+    on_undo_color_replacement,
+    on_preview_generated_update_palette,
+    on_color_swatch_click,
+    on_lut_change_update_colors,
+    on_lut_color_swatch_click,
+    on_replacement_color_select,
+    on_preview_update_lut_colors,
+    on_highlight_color_change,
+    on_clear_highlight
 )
 
 # Runtime-injected i18n keys (avoids editing core/i18n.py).
@@ -365,7 +376,7 @@ def map_modeling_mode(mode_display_text):
 def generate_final_model_with_mapping(image_path, lut_path, target_width_mm, spacer_thick,
                                       structure_mode, auto_bg, bg_tol, color_mode,
                                       add_loop, loop_width, loop_length, loop_hole, loop_pos,
-                                      modeling_mode_display, quantize_colors):
+                                      modeling_mode_display, quantize_colors, color_replacements=None):
     """Run final model generation with UI mode label mapped to internal mode.
 
     Returns:
@@ -376,14 +387,14 @@ def generate_final_model_with_mapping(image_path, lut_path, target_width_mm, spa
         image_path, lut_path, target_width_mm, spacer_thick,
         structure_mode, auto_bg, bg_tol, color_mode,
         add_loop, loop_width, loop_length, loop_hole, loop_pos,
-        modeling_mode, quantize_colors
+        modeling_mode, quantize_colors, color_replacements
     )
 
 
 def process_batch_generation(batch_files, is_batch, single_image, lut_path, target_width_mm,
                              spacer_thick, structure_mode, auto_bg, bg_tol, color_mode,
                              add_loop, loop_width, loop_length, loop_hole, loop_pos,
-                             modeling_mode_display, quantize_colors, progress=gr.Progress()):
+                             modeling_mode_display, quantize_colors, color_replacements=None, progress=gr.Progress()):
     """Dispatch to single-image or batch generation; batch writes a ZIP of 3MFs.
 
     Returns:
@@ -391,7 +402,7 @@ def process_batch_generation(batch_files, is_batch, single_image, lut_path, targ
     """
     args = (lut_path, target_width_mm, spacer_thick, structure_mode, auto_bg, bg_tol,
             color_mode, add_loop, loop_width, loop_length, loop_hole, loop_pos,
-            modeling_mode_display, quantize_colors)
+            modeling_mode_display, quantize_colors, color_replacements)
 
     if not is_batch:
         return generate_final_model_with_mapping(single_image, *args)
@@ -532,6 +543,10 @@ def create_app():
             fn=on_lut_select,
             inputs=[components['dropdown_conv_lut_dropdown']],
             outputs=[components['state_conv_lut_path'], components['md_conv_lut_status']]
+        ).then(
+            fn=on_lut_change_update_colors,
+            inputs=[components['state_conv_lut_path']],
+            outputs=[components['html_conv_lut_colors']]
         )
 
     return app
@@ -942,6 +957,114 @@ def create_converter_tab_content(lang: str) -> dict:
                         interactive=False,
                         show_label=False
                     )
+                    
+                    # ========== Color Palette & Replacement ==========
+                    with gr.Accordion("🎨 颜色调色板 Color Palette", open=False):
+                        # State for color replacement
+                        conv_selected_color = gr.State(None)  # Currently selected color hex
+                        conv_replacement_map = gr.State({})   # {original_hex: replacement_hex}
+                        conv_replacement_history = gr.State([])  # History stack for undo
+                        conv_replacement_color_state = gr.State(None)  # Selected replacement color from LUT
+                        
+                        # Palette display (clickable swatches)
+                        conv_palette_html = gr.HTML(
+                            value="<p style='color:#888;'>生成预览后显示调色板 | Generate preview to see palette</p>",
+                            label=""
+                        )
+                        
+                        # Hidden textbox to receive color selection from JavaScript
+                        # Note: Must be visible in DOM for JavaScript to update, but hidden via CSS
+                        conv_color_selected_hidden = gr.Textbox(
+                            value="",
+                            visible=True,
+                            interactive=True,
+                            elem_id="conv-color-selected-hidden",
+                            elem_classes=["hidden-textbox-trigger"],
+                            label="",
+                            show_label=False,
+                            container=False
+                        )
+                        
+                        # Hidden textbox to receive highlight color from JavaScript (for preview highlight)
+                        conv_highlight_color_hidden = gr.Textbox(
+                            value="",
+                            visible=True,
+                            interactive=True,
+                            elem_id="conv-highlight-color-hidden",
+                            elem_classes=["hidden-textbox-trigger"],
+                            label="",
+                            show_label=False,
+                            container=False
+                        )
+                        
+                        # Hidden button to trigger highlight (clicked by JavaScript)
+                        conv_highlight_trigger_btn = gr.Button(
+                            "trigger_highlight",
+                            elem_id="conv-highlight-trigger-btn",
+                            elem_classes=["hidden-textbox-trigger"],
+                            visible=True
+                        )
+                        
+                        # Color replacement controls
+                        with gr.Row():
+                            conv_selected_display = gr.Textbox(
+                                label="已选颜色 Selected",
+                                value="未选择",
+                                interactive=False,
+                                scale=1
+                            )
+                        
+                        # LUT available colors - clickable grid (no dropdown)
+                        gr.Markdown("### 🎨 替换为 LUT 可用颜色 | Replace with LUT Color")
+                        gr.Markdown("*点击色块选择替换颜色 | Click a color swatch to select*", elem_classes=["text-muted"])
+                        
+                        # Visual clickable grid of available LUT colors
+                        conv_lut_colors_html = gr.HTML(
+                            value="<p style='color:#888;'>选择 LUT 后显示可用颜色 | Select LUT to see available colors</p>",
+                            label=""
+                        )
+                        
+                        # Hidden textbox to receive LUT color selection from JavaScript
+                        conv_lut_color_selected_hidden = gr.Textbox(
+                            value="",
+                            visible=True,
+                            interactive=True,
+                            elem_id="conv-lut-color-selected-hidden",
+                            elem_classes=["hidden-textbox-trigger"],
+                            label="",
+                            show_label=False,
+                            container=False
+                        )
+                        
+                        # Hidden button to trigger LUT color selection (clicked by JavaScript)
+                        conv_lut_color_trigger_btn = gr.Button(
+                            "trigger_lut_color",
+                            elem_id="conv-lut-color-trigger-btn",
+                            elem_classes=["hidden-textbox-trigger"],
+                            visible=True
+                        )
+                        
+                        # Hidden button to trigger palette color selection (clicked by JavaScript)
+                        conv_color_trigger_btn = gr.Button(
+                            "trigger_color",
+                            elem_id="conv-color-trigger-btn",
+                            elem_classes=["hidden-textbox-trigger"],
+                            visible=True
+                        )
+                        
+                        conv_replacement_display = gr.Textbox(
+                            label="替换颜色 Replacement",
+                            value="未选择替换颜色",
+                            interactive=False,
+                            scale=1
+                        )
+                        
+                        with gr.Row():
+                            conv_apply_replacement = gr.Button("✅ 应用替换 Apply", size="sm")
+                            conv_undo_replacement = gr.Button("↩️ 撤销 Undo", size="sm")
+                            conv_clear_replacements = gr.Button("🗑️ 清除所有 Clear All", size="sm")
+                    # ========== END Color Palette ==========
+                    
                     with gr.Group():
                         components['md_conv_loop_section'] = gr.Markdown(
                             I18n.get('conv_loop_section', lang)
@@ -1124,6 +1247,10 @@ def create_converter_tab_content(lang: str) -> dict:
             fn=save_last_lut_setting,
             inputs=[components['dropdown_conv_lut_dropdown']],
             outputs=None
+    ).then(
+            fn=on_lut_change_update_colors,
+            inputs=[conv_lut_path],
+            outputs=[conv_lut_colors_html]
     )
 
     conv_lut_upload.upload(
@@ -1156,10 +1283,85 @@ def create_converter_tab_content(lang: str) -> dict:
                 components['checkbox_conv_auto_bg'],
                 components['slider_conv_tolerance'],
                 components['radio_conv_color_mode'],
-                components['radio_conv_modeling_mode']
+                components['radio_conv_modeling_mode'],
+                components['slider_conv_quantize_colors']
             ],
             outputs=[conv_preview, conv_preview_cache, components['textbox_conv_status']]
+    ).then(
+            on_preview_generated_update_palette,
+            inputs=[conv_preview_cache],
+            outputs=[conv_palette_html, conv_selected_color]
+    ).then(
+            on_preview_update_lut_colors,
+            inputs=[conv_preview_cache, conv_lut_path],
+            outputs=[conv_lut_colors_html]
     )
+    
+    # Hidden textbox receives color selection from JavaScript click (palette)
+    # Use button click instead of textbox change for more reliable triggering
+    conv_color_trigger_btn.click(
+            on_color_swatch_click,
+            inputs=[conv_color_selected_hidden],
+            outputs=[conv_selected_color, conv_selected_display]
+    )
+    
+    # Hidden textbox receives highlight color from JavaScript click (triggers preview highlight)
+    # Use button click instead of textbox change for more reliable triggering
+    conv_highlight_trigger_btn.click(
+            on_highlight_color_change,
+            inputs=[
+                conv_highlight_color_hidden, conv_preview_cache, conv_loop_pos,
+                components['checkbox_conv_loop_enable'],
+                components['slider_conv_loop_width'], components['slider_conv_loop_length'],
+                components['slider_conv_loop_hole'], components['slider_conv_loop_angle']
+            ],
+            outputs=[conv_preview, components['textbox_conv_status']]
+    )
+    
+    # Hidden textbox receives LUT color selection from JavaScript click
+    # Use button click instead of textbox change for more reliable triggering
+    conv_lut_color_trigger_btn.click(
+            on_lut_color_swatch_click,
+            inputs=[conv_lut_color_selected_hidden],
+            outputs=[conv_replacement_color_state, conv_replacement_display]
+    )
+    
+    # Color replacement: Apply replacement
+    conv_apply_replacement.click(
+            on_apply_color_replacement,
+            inputs=[
+                conv_preview_cache, conv_selected_color, conv_replacement_color_state,
+                conv_replacement_map, conv_replacement_history, conv_loop_pos, components['checkbox_conv_loop_enable'],
+                components['slider_conv_loop_width'], components['slider_conv_loop_length'],
+                components['slider_conv_loop_hole'], components['slider_conv_loop_angle']
+            ],
+            outputs=[conv_preview, conv_preview_cache, conv_palette_html, conv_replacement_map, conv_replacement_history, components['textbox_conv_status']]
+    )
+    
+    # Color replacement: Undo last replacement
+    conv_undo_replacement.click(
+            on_undo_color_replacement,
+            inputs=[
+                conv_preview_cache, conv_replacement_map, conv_replacement_history,
+                conv_loop_pos, components['checkbox_conv_loop_enable'],
+                components['slider_conv_loop_width'], components['slider_conv_loop_length'],
+                components['slider_conv_loop_hole'], components['slider_conv_loop_angle']
+            ],
+            outputs=[conv_preview, conv_preview_cache, conv_palette_html, conv_replacement_map, conv_replacement_history, components['textbox_conv_status']]
+    )
+    
+    # Color replacement: Clear all replacements
+    conv_clear_replacements.click(
+            on_clear_color_replacements,
+            inputs=[
+                conv_preview_cache, conv_replacement_map, conv_replacement_history,
+                conv_loop_pos, components['checkbox_conv_loop_enable'],
+                components['slider_conv_loop_width'], components['slider_conv_loop_length'],
+                components['slider_conv_loop_hole'], components['slider_conv_loop_angle']
+            ],
+            outputs=[conv_preview, conv_preview_cache, conv_palette_html, conv_replacement_map, conv_replacement_history, components['textbox_conv_status']]
+    )
+    
     conv_preview.select(
             on_preview_click,
             inputs=[conv_preview_cache, conv_loop_pos],
@@ -1221,7 +1423,8 @@ def create_converter_tab_content(lang: str) -> dict:
                 components['slider_conv_loop_hole'],
                 conv_loop_pos,
                 components['radio_conv_modeling_mode'],
-                components['slider_conv_quantize_colors']
+                components['slider_conv_quantize_colors'],
+                conv_replacement_map
             ],
             outputs=[
                 components['file_conv_download_file'],
@@ -1237,6 +1440,7 @@ def create_converter_tab_content(lang: str) -> dict:
         cancels=[generate_event]
     )
     components['state_conv_lut_path'] = conv_lut_path
+    components['html_conv_lut_colors'] = conv_lut_colors_html
     return components
 
 
