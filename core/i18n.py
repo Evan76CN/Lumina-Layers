@@ -672,7 +672,7 @@ class I18n:
         
         # ==================== About Page Content ====================
         'about_content': {
-            'zh': """## 🌟 Lumina Studio v1.5.4
+            'zh': """## 🌟 Lumina Studio v1.5.6
 
 **多材料3D打印色彩系统**
 
@@ -736,16 +736,13 @@ class I18n:
 
 ---
 
-### 📝 v1.5.4 更新日志
+### 📝 v1.5.4 更新日志 (历史)
 
 #### 🐛 矢量模式改进
 - 改进矢量模式的布尔运算逻辑
 - 优化SVG颜色顺序处理
 - 添加微Z偏移以保持细节独立性
 - 增强小特征保护机制
-
-#### 🔄 版本更新
-- 更新版本号至 v1.5.4
 
 ---
 
@@ -884,16 +881,13 @@ Accurate color reproduction for FDM printing
 
 ---
 
-### 📝 v1.5.4 Changelog
+### 📝 v1.5.4 Changelog (History)
 
 #### 🐛 Vector Mode Improvements
 - Improved Boolean operation logic in vector mode
 - Optimized SVG color order processing
 - Added micro Z-offset to maintain detail independence
 - Enhanced small feature protection mechanism
-
-#### 🔄 Version Update
-- Updated version number to v1.5.4
 
 ---
 
