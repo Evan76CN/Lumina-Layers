@@ -18,8 +18,8 @@ class I18n:
             'en': '✨ Lumina Studio'
         },
         'app_subtitle': {
-            'zh': '多材料3D打印色彩系统 | v1.5.6',
-            'en': 'Multi-Material 3D Print Color System | v1.5.6'
+            'zh': '多材料3D打印色彩系统 | v1.5.7',
+            'en': 'Multi-Material 3D Print Color System | v1.5.7'
         },
         'lang_btn_zh': {
             'zh': '🌐 中文',
@@ -672,7 +672,7 @@ class I18n:
         
         # ==================== About Page Content ====================
         'about_content': {
-            'zh': """## 🌟 Lumina Studio v1.5.6
+            'zh': """## 🌟 Lumina Studio v1.5.7
 
 **多材料3D打印色彩系统**
 
@@ -703,6 +703,15 @@ class I18n:
 - **KD-Tree 色彩匹配**
 - **RLE 几何生成**
 - **K-Means 色彩量化**
+
+---
+
+### 📝 v1.5.7 更新日志
+
+#### 🧹 代码清理
+- 移除融合LUT功能（简化用户体验）
+- 保留BW黑白模式功能
+- 清理.npz文件格式支持
 
 ---
 
@@ -814,10 +823,10 @@ class I18n:
 
 <div style="text-align:center; color:#888; margin-top:20px;">
     Made with ❤️ by [MIN]<br>
-    v1.5.6 | 2025
+    v1.5.7 | 2025
 </div>
 """,
-            'en': """## 🌟 Lumina Studio v1.5.6
+            'en': """## 🌟 Lumina Studio v1.5.7
 
 **Multi-Material 3D Print Color System**
 
@@ -848,6 +857,15 @@ Accurate color reproduction for FDM printing
 - **KD-Tree Color Matching**
 - **RLE Geometry Generation**
 - **K-Means Color Quantization**
+
+---
+
+### 📝 v1.5.7 Changelog
+
+#### 🧹 Code Cleanup
+- Removed merged LUT feature (simplified UX)
+- Kept BW black & white mode
+- Cleaned up .npz format support
 
 ---
 
@@ -959,7 +977,7 @@ Special thanks to:
 
 <div style="text-align:center; color:#888; margin-top:20px;">
     Made with ❤️ by [MIN]<br>
-    v1.5.6 | 2025
+    v1.5.7 | 2025
 </div>
 """
         },
