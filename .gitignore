@@ -239,4 +239,7 @@ lumina_stats.txt
 +lut-npy163623644576/Custom/*.npy
 .venv312/
 .venv*/
-lut-npyÔ¤Éè/Custom/*.npy
+
+# Kiro hooks
+.kiro/hooks/
+lut-npyÔ¤ï¿½ï¿½/Custom/*.npy
