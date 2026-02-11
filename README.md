@@ -8,7 +8,7 @@ Physics-Based Multi-Material FDM Color System
 
 ## Project Status
 
-**Current Version**: v1.5.6  
+**Current Version**: v1.5.7  
 **License**: CC BY-NC-SA 4.0 (with Commercial Exemption)  
 **Nature**: Non-profit independent implementation, open-source community project
 
@@ -150,7 +150,7 @@ Converts images into printable 3D models using calibrated data.
 
 ---
 
-## What's New in v1.5.6 🚀
+## What's New in v1.5.7 🚀
 
 ### 6-Color and 8-Color Mode Support
 
