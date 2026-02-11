@@ -305,11 +305,15 @@ def manual_fix_cell(coord, color_input, lut_path=None):
         actual_path = lut_path.name
 
     if not coord or not actual_path or not os.path.exists(actual_path):
+        print(f"[MANUAL_FIX] Error: coord={coord}, actual_path={actual_path}, exists={os.path.exists(actual_path) if actual_path else False}")
         return None, "⚠️ 错误"
 
     try:
+        print(f"[MANUAL_FIX] Loading LUT from: {actual_path}")
         lut = np.load(actual_path)
+        print(f"[MANUAL_FIX] LUT shape: {lut.shape}")
         r, c = coord
+        print(f"[MANUAL_FIX] Fixing cell ({r}, {c})")
         new_color = [0, 0, 0]
 
         color_str = str(color_input)
@@ -324,8 +328,33 @@ def manual_fix_cell(coord, color_input, lut_path=None):
         else:
             new_color = [int(color_str[i:i+2], 16) for i in (0, 2, 4)]
 
+        print(f"[MANUAL_FIX] Old color: {lut[r, c]}, New color: {new_color}")
         lut[r, c] = new_color
+        
+        # Save to the actual path
         np.save(actual_path, lut)
-        return cv2.resize(lut, (512, 512), interpolation=cv2.INTER_NEAREST), "✅ 已修正"
+        print(f"[MANUAL_FIX] Saved to: {actual_path}")
+        
+        # For 8-color mode: also ensure we save to the correct assets path
+        # Check if the path is a temp_8c_page file
+        if "temp_8c_page_" in actual_path:
+            # Extract page number and ensure it's saved to assets/
+            import re
+            match = re.search(r'temp_8c_page_(\d+)\.npy', actual_path)
+            if match:
+                page_num = match.group(1)
+                assets_path = os.path.join("assets", f"temp_8c_page_{page_num}.npy")
+                if os.path.abspath(actual_path) != os.path.abspath(assets_path):
+                    # If the actual_path is not the assets path, save to assets too
+                    os.makedirs("assets", exist_ok=True)
+                    np.save(assets_path, lut)
+                    print(f"[MANUAL_FIX] Also saved to assets: {assets_path}")
+        
+        preview = cv2.resize(lut, (512, 512), interpolation=cv2.INTER_NEAREST)
+        print(f"[MANUAL_FIX] Preview shape: {preview.shape}")
+        return preview, "✅ 已修正"
     except Exception as e:
+        print(f"[MANUAL_FIX] Exception: {e}")
+        import traceback
+        traceback.print_exc()
         return None, f"❌ 格式错误: {color_input}"

@@ -2129,7 +2129,7 @@ def create_extractor_tab_content(lang: str) -> dict:
             with gr.Row():
                 components['checkbox_ext_wb'] = gr.Checkbox(
                     label=I18n.get('ext_wb', lang),
-                    value=True
+                    value=False
                 )
                 components['checkbox_ext_vignette'] = gr.Checkbox(
                     label=I18n.get('ext_vignette', lang),
