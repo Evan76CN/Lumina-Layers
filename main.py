@@ -71,19 +71,12 @@ if __name__ == "__main__":
     app = create_app()
 
     try:
-        from ui.layout_new import HEADER_CSS
-        # Import crop extension for head JS injection
-        from ui.crop_extension import get_crop_head_js
         app.launch(
-            inbrowser=False,
+            inbrowser=True,
             server_name="0.0.0.0",
             server_port=PORT,
             show_error=True,
-            prevent_thread_lock=True,
-            favicon_path="icon.ico" if os.path.exists("icon.ico") else None,
-            css=CUSTOM_CSS + HEADER_CSS,
-            theme=gr.themes.Soft(),
-            head=get_crop_head_js()
+            prevent_thread_lock=True
         )
     except Exception as e:
         raise
