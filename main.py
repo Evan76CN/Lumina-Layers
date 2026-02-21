@@ -70,7 +70,6 @@ def start_browser(port):
 if __name__ == "__main__":
     try:
         tray = None
-        PORT = 7860
         try:
             PORT = find_available_port(7860)
             tray = LuminaTray(port=PORT)

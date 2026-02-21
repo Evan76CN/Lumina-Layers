@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Lumina Studio - UI Layout (Refactored with i18n)
 UI layout definition - Refactored version with language switching support
@@ -664,16 +665,27 @@ def _preview_update(img):
 def process_batch_generation(batch_files, is_batch, single_image, lut_path, target_width_mm,
                              spacer_thick, structure_mode, auto_bg, bg_tol, color_mode,
                              add_loop, loop_width, loop_length, loop_hole, loop_pos,
-                             modeling_mode, quantize_colors, color_replacements=None, progress=gr.Progress()):
+                             modeling_mode, quantize_colors, color_replacements=None,
+                             separate_backing=False, progress=gr.Progress()):
     """Dispatch to single-image or batch generation; batch writes a ZIP of 3MFs.
+
+    Args:
+        separate_backing: Boolean flag to separate backing as individual object (default: False)
 
     Returns:
         tuple: (file_or_zip_path, model3d_value, preview_image, status_text).
     """
-    modeling_mode = ModelingMode(modeling_mode)
+    # Handle None modeling_mode (use default)
+    if modeling_mode is None:
+        modeling_mode = ModelingMode.HIGH_FIDELITY
+    else:
+        modeling_mode = ModelingMode(modeling_mode)
+    # Use default white color for backing (fixed, not user-selectable)
+    backing_color_name = "White"
     args = (lut_path, target_width_mm, spacer_thick, structure_mode, auto_bg, bg_tol,
             color_mode, add_loop, loop_width, loop_length, loop_hole, loop_pos,
-            modeling_mode, quantize_colors, color_replacements)
+            modeling_mode, quantize_colors, color_replacements, backing_color_name,
+            separate_backing)
 
     if not is_batch:
         out_path, glb_path, preview_img, status = generate_final_model(single_image, *args)
@@ -726,7 +738,11 @@ def process_batch_generation(batch_files, is_batch, single_image, lut_path, targ
 
 def create_app():
     """Build the Gradio app (tabs, i18n, events) and return the Blocks instance."""
-    with gr.Blocks(title="Lumina Studio", css=HEADER_CSS + LUT_GRID_CSS) as app:
+    with gr.Blocks(title="Lumina Studio") as app:
+        # Inject CSS styles via HTML component (for Gradio 4.20.0 compatibility)
+        from ui.styles import CUSTOM_CSS
+        gr.HTML(f"<style>{CUSTOM_CSS + HEADER_CSS + LUT_GRID_CSS}</style>")
+        
         lang_state = gr.State(value="zh")
         theme_state = gr.State(value=False)  # False=light, True=dark
 
@@ -749,10 +765,159 @@ def create_app():
                     elem_id="theme-btn"
                 )
         
+        # Global scripts for crop modal - using a different approach for Gradio 4.20.0
+        # Store script in a hidden element and execute it
+        gr.HTML("""
+<div id="crop-scripts-loader" style="display:none;">
+<textarea id="crop-script-content" style="display:none;">
+window.cropper = null;
+window.originalImageData = null;
+
+function hideCropHelperComponents() {
+    ['crop-data-json', 'use-original-hidden-btn', 'confirm-crop-hidden-btn'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.style.cssText = 'position:absolute!important;left:-9999px!important;top:-9999px!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;visibility:hidden!important;';
+        }
+    });
+}
+document.addEventListener('DOMContentLoaded', function() { setTimeout(hideCropHelperComponents, 500); });
+setInterval(hideCropHelperComponents, 2000);
+
+window.updateCropDataJson = function(x, y, w, h) {
+    var jsonData = JSON.stringify({x: x, y: y, w: w, h: h});
+    var container = document.getElementById('crop-data-json');
+    if (!container) {
+        console.error('crop-data-json element not found');
+        return;
+    }
+    var textarea = container.querySelector('textarea');
+    if (textarea) {
+        textarea.value = jsonData;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        console.log('Updated crop data JSON:', jsonData);
+    } else {
+        console.error('textarea not found in crop-data-json');
+    }
+};
+
+window.clickGradioButton = function(elemId) {
+    var elem = document.getElementById(elemId);
+    if (!elem) {
+        console.error('clickGradioButton: element not found:', elemId);
+        return;
+    }
+    var btn = elem.querySelector('button') || elem;
+    if (btn && btn.tagName === 'BUTTON') {
+        btn.click();
+        console.log('Clicked button:', elemId);
+    } else {
+        console.error('Button element not found for:', elemId);
+    }
+};
+
+window.openCropModal = function(imageSrc, width, height) {
+    console.log('openCropModal called:', imageSrc ? imageSrc.substring(0, 50) + '...' : 'null', width, height);
+    window.originalImageData = { src: imageSrc, width: width, height: height };
+    
+    var origSizeEl = document.getElementById('crop-original-size');
+    if (origSizeEl) {
+        var prefix = origSizeEl.dataset.prefix || 'Size';
+        origSizeEl.textContent = prefix + ': ' + width + ' × ' + height + ' px';
+    }
+    
+    var img = document.getElementById('crop-image');
+    if (!img) { console.error('crop-image element not found'); return; }
+    img.src = imageSrc;
+    
+    var overlay = document.getElementById('crop-modal-overlay');
+    if (overlay) overlay.style.display = 'flex';
+    
+    img.onload = function() {
+        if (window.cropper) window.cropper.destroy();
+        window.cropper = new Cropper(img, {
+            viewMode: 1, dragMode: 'crop', autoCropArea: 1, responsive: true,
+            crop: function(event) {
+                var data = event.detail;
+                var cropX = document.getElementById('crop-x');
+                var cropY = document.getElementById('crop-y');
+                var cropW = document.getElementById('crop-width');
+                var cropH = document.getElementById('crop-height');
+                var selSize = document.getElementById('crop-selection-size');
+                if (cropX) cropX.value = Math.round(data.x);
+                if (cropY) cropY.value = Math.round(data.y);
+                if (cropW) cropW.value = Math.round(data.width);
+                if (cropH) cropH.value = Math.round(data.height);
+                if (selSize) {
+                    var prefix = selSize.dataset.prefix || 'Selection';
+                    selSize.textContent = prefix + ': ' + Math.round(data.width) + ' × ' + Math.round(data.height) + ' px';
+                }
+            }
+        });
+    };
+};
+
+window.closeCropModal = function() {
+    var overlay = document.getElementById('crop-modal-overlay');
+    if (overlay) overlay.style.display = 'none';
+    if (window.cropper) { window.cropper.destroy(); window.cropper = null; }
+};
+
+window.updateCropperFromInputs = function() {
+    if (!window.cropper) return;
+    window.cropper.setData({
+        x: parseInt(document.getElementById('crop-x').value) || 0,
+        y: parseInt(document.getElementById('crop-y').value) || 0,
+        width: parseInt(document.getElementById('crop-width').value) || 100,
+        height: parseInt(document.getElementById('crop-height').value) || 100
+    });
+};
+
+window.useOriginalImage = function() {
+    if (!window.originalImageData) return;
+    window.updateCropDataJson(0, 0, window.originalImageData.width, window.originalImageData.height);
+    window.closeCropModal();
+    setTimeout(function() { window.clickGradioButton('use-original-hidden-btn'); }, 100);
+};
+
+window.confirmCrop = function() {
+    if (!window.cropper) return;
+    var data = window.cropper.getData(true);
+    console.log('confirmCrop data:', data);
+    window.updateCropDataJson(Math.round(data.x), Math.round(data.y), Math.round(data.width), Math.round(data.height));
+    window.closeCropModal();
+    setTimeout(function() { window.clickGradioButton('confirm-crop-hidden-btn'); }, 100);
+};
+
+console.log('[CROP] Global scripts loaded, openCropModal:', typeof window.openCropModal);
+</textarea>
+</div>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+<img src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" onerror="
+  var s1 = document.createElement('script');
+  s1.src = 'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js';
+  s1.onload = function() {
+    var s2 = document.createElement('script');
+    s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js';
+    s2.onload = function() {
+      var content = document.getElementById('crop-script-content');
+      if (content) {
+        var s3 = document.createElement('script');
+        s3.textContent = content.value;
+        document.head.appendChild(s3);
+      }
+    };
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s1);
+" style="display:none;">
+""")
+        
         stats = Stats.get_all()
         stats_html = gr.HTML(
             value=_get_stats_html("zh", stats),
-            elem_id="stats-bar"
+            elem_classes=["stats-bar"]
         )
         
         tab_components = {}
@@ -1305,7 +1470,7 @@ def create_converter_tab_content(lang: str, lang_state=None) -> dict:
                 label=I18n.get('conv_image_label', lang),
                 type="filepath",
                 image_mode=None,  # Auto-detect mode to support both JPEG and PNG
-                height=240,
+                height=400,
                 visible=True,
                 elem_id="conv-image-input"
             )
@@ -1332,6 +1497,14 @@ def create_converter_tab_content(lang: str, lang_state=None) -> dict:
                     0.2, 3.5, 1.2, step=0.08,
                     label=I18n.get('conv_thickness', lang)
                 )
+            
+            # Separate backing checkbox
+            components['checkbox_conv_separate_backing'] = gr.Checkbox(
+                label="底板单独一个对象 | Separate Backing as Individual Object",
+                value=False,
+                info="勾选后，底板将作为独立对象导出到3MF文件"
+            )
+            
             conv_target_height_mm = components['slider_conv_height']
 
             with gr.Row(elem_classes=["compact-row"]):
@@ -1651,22 +1824,31 @@ def create_converter_tab_content(lang: str, lang_state=None) -> dict:
     # JavaScript to open crop modal (不传递颜色推荐，弹窗中不显示)
     open_crop_modal_js = """
     () => {
+        console.log('[CROP] Trigger fired, waiting for elements...');
         setTimeout(() => {
+            console.log('[CROP] Checking for openCropModal function:', typeof window.openCropModal);
             const dimElement = document.querySelector('#preprocess-dimensions-data');
+            console.log('[CROP] dimElement found:', !!dimElement);
             if (dimElement) {
                 const width = parseInt(dimElement.dataset.width) || 0;
                 const height = parseInt(dimElement.dataset.height) || 0;
+                console.log('[CROP] Dimensions:', width, 'x', height);
                 if (width > 0 && height > 0) {
                     const imgContainer = document.querySelector('#conv-image-input');
+                    console.log('[CROP] imgContainer found:', !!imgContainer);
                     if (imgContainer) {
                         const img = imgContainer.querySelector('img');
+                        console.log('[CROP] img found:', !!img, 'src:', img ? img.src.substring(0, 50) : 'none');
                         if (img && img.src && typeof window.openCropModal === 'function') {
+                            console.log('[CROP] Calling openCropModal...');
                             window.openCropModal(img.src, width, height, 0, 0);
+                        } else {
+                            console.error('[CROP] Cannot open modal - missing requirements');
                         }
                     }
                 }
             }
-        }, 300);
+        }, 800);
     }
     """
     
@@ -1805,6 +1987,10 @@ def create_converter_tab_content(lang: str, lang_state=None) -> dict:
             inputs=[conv_lut_path],
             outputs=[components['radio_conv_color_mode']]
     )
+    
+
+    
+
 
     conv_lut_upload.upload(
             on_lut_upload_save,
@@ -2045,7 +2231,8 @@ def create_converter_tab_content(lang: str, lang_state=None) -> dict:
                 conv_loop_pos,
                 components['radio_conv_modeling_mode'],
                 components['slider_conv_quantize_colors'],
-                conv_replacement_map
+                conv_replacement_map,
+                components['checkbox_conv_separate_backing']
             ],
             outputs=[
                 components['file_conv_download_file'],
