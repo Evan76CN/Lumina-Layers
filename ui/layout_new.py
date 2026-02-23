@@ -1527,7 +1527,7 @@ def create_converter_tab_content(lang: str, lang_state=None) -> dict:
             # Relief height slider (only visible when relief mode is enabled and a color is selected)
             components['slider_conv_relief_height'] = gr.Slider(
                 minimum=1.0,
-                maximum=15.0,
+                maximum=20.0,
                 value=1.2,
                 step=0.1,
                 label="当前选中颜色的独立高度 | Selected Color Z-Height (mm)",
@@ -1537,7 +1537,7 @@ def create_converter_tab_content(lang: str, lang_state=None) -> dict:
             
             # Auto Height Generator (only visible when relief mode is enabled)
             with gr.Accordion(label="⚡ 自动高度生成器 | Auto Height Generator", open=False, visible=False) as conv_auto_height_accordion:
-                gr.Markdown("根据颜色明度自动生成阶梯式高度映射 | Automatically generate stepped heights based on color luminance")
+                gr.Markdown("根据颜色明度自动生成归一化高度映射 | Automatically generate normalized heights based on color luminance")
                 
                 components['radio_conv_auto_height_mode'] = gr.Radio(
                     choices=[
@@ -1549,13 +1549,13 @@ def create_converter_tab_content(lang: str, lang_state=None) -> dict:
                     info="选择哪种颜色应该更高"
                 )
                 
-                components['slider_conv_auto_height_step'] = gr.Slider(
-                    minimum=0.1,
-                    maximum=1.0,
-                    value=0.2,
+                components['slider_conv_auto_height_max'] = gr.Slider(
+                    minimum=2.0,
+                    maximum=15.0,
+                    value=5.0,
                     step=0.1,
-                    label="阶梯高差 | Step Height (mm)",
-                    info="每个颜色之间的高度差"
+                    label="最大浮雕高度 | Max Relief Height (mm)",
+                    info="所有颜色的最大高度（相对于底板）"
                 )
                 
                 components['btn_conv_auto_height_apply'] = gr.Button(
@@ -2364,8 +2364,8 @@ def create_converter_tab_content(lang: str, lang_state=None) -> dict:
     )
     
     # Auto Height Generator Event Handler
-    def on_auto_height_apply(cache, mode, step_height, base_thickness):
-        """Generate automatic height mapping based on color luminance"""
+    def on_auto_height_apply(cache, mode, max_relief_height, base_thickness):
+        """Generate automatic height mapping based on color luminance using normalization"""
         if cache is None:
             gr.Warning("⚠️ 请先生成预览图 | Please generate preview first")
             return {}
@@ -2396,10 +2396,10 @@ def create_converter_tab_content(lang: str, lang_state=None) -> dict:
         
         color_list = list(unique_colors)
         
-        # Generate height map using the algorithm
-        new_height_map = generate_auto_height_map(color_list, mode, base_thickness, step_height)
+        # Generate height map using the normalized algorithm
+        new_height_map = generate_auto_height_map(color_list, mode, base_thickness, max_relief_height)
         
-        gr.Info(f"✅ 已根据颜色明度自动生成 {len(new_height_map)} 个颜色的高度阶梯！您可以继续点击单个颜色进行微调。")
+        gr.Info(f"✅ 已根据颜色明度自动生成 {len(new_height_map)} 个颜色的归一化高度！您可以继续点击单个颜色进行微调。")
         
         return new_height_map
     
@@ -2408,7 +2408,7 @@ def create_converter_tab_content(lang: str, lang_state=None) -> dict:
         inputs=[
             conv_preview_cache,
             components['radio_conv_auto_height_mode'],
-            components['slider_conv_auto_height_step'],
+            components['slider_conv_auto_height_max'],
             components['slider_conv_thickness']
         ],
         outputs=[conv_color_height_map]

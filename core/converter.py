@@ -914,58 +914,90 @@ def calculate_luminance(hex_color):
     return luminance
 
 
-def generate_auto_height_map(color_list, mode, base_thickness, step_height):
+def generate_auto_height_map(color_list, mode, base_thickness, max_relief_height):
     """
-    Generate automatic height mapping based on color luminance.
+    Generate automatic height mapping based on color luminance using Min-Max normalization.
     
     This function calculates the luminance of each color and assigns heights
-    in a stepped manner, creating a relief effect where darker or lighter
-    colors are elevated.
+    using normalization, ensuring all heights fall within [base_thickness, max_relief_height].
+    This prevents height explosion when dealing with many colors.
+    
+    Algorithm:
+    1. Calculate luminance Y = 0.299*R + 0.587*G + 0.114*B for each color
+    2. Find Y_min and Y_max across all colors
+    3. Calculate available height range: Delta_Z = max_relief_height - base_thickness
+    4. For each color, calculate normalized ratio:
+       - If "浅色凸起": Ratio = (Y - Y_min) / (Y_max - Y_min)
+       - If "深色凸起": Ratio = 1.0 - (Y - Y_min) / (Y_max - Y_min)
+    5. Final height = base_thickness + Ratio * Delta_Z
+    6. Round to 0.1mm precision
     
     Args:
         color_list: List of hex color strings (e.g., ['#ff0000', '#00ff00'])
         mode: Sorting mode - "深色凸起" (darker higher) or "浅色凸起" (lighter higher)
         base_thickness: Base thickness in mm (minimum height)
-        step_height: Height increment per step in mm
+        max_relief_height: Maximum relief height in mm (maximum height)
     
     Returns:
         dict: Color-to-height mapping {hex_color: height_mm}
     
     Example:
         >>> colors = ['#ff0000', '#00ff00', '#0000ff']
-        >>> generate_auto_height_map(colors, "深色凸起", 1.2, 0.2)
-        {'#0000ff': 1.4, '#ff0000': 1.6, '#00ff00': 1.8}
+        >>> generate_auto_height_map(colors, "深色凸起", 1.2, 5.0)
+        {'#00ff00': 1.2, '#ff0000': 3.1, '#0000ff': 5.0}
     """
     if not color_list:
         return {}
     
-    # Calculate luminance for each color
+    # Step 1: Calculate luminance for each color
     color_luminance = []
     for color in color_list:
         luminance = calculate_luminance(color)
         color_luminance.append((color, luminance))
     
-    # Sort by luminance
-    if "深色凸起" in mode or "Darker Higher" in mode:
-        # Darker colors (lower luminance) should be higher
-        # Sort descending: brightest first (lowest height), darkest last (highest height)
-        color_luminance.sort(key=lambda x: x[1], reverse=True)  # Descending luminance
-    else:
-        # Lighter colors (higher luminance) should be higher
-        # Sort ascending: darkest first (lowest height), brightest last (highest height)
-        color_luminance.sort(key=lambda x: x[1])  # Ascending luminance
+    # Step 2: Find min and max luminance
+    luminances = [lum for _, lum in color_luminance]
+    y_min = min(luminances)
+    y_max = max(luminances)
     
-    # Assign heights with stepped increments
+    # Handle edge case: all colors have same luminance
+    if y_max == y_min:
+        # All colors get the same height (average of base and max)
+        avg_height = (base_thickness + max_relief_height) / 2.0
+        color_height_map = {color: round(avg_height, 1) for color, _ in color_luminance}
+        print(f"[AUTO HEIGHT] All colors have same luminance, using average height: {avg_height:.1f}mm")
+        return color_height_map
+    
+    # Step 3: Calculate available height range
+    delta_z = max_relief_height - base_thickness
+    
+    # Step 4 & 5: Calculate normalized heights
     color_height_map = {}
-    for i, (color, luminance) in enumerate(color_luminance):
-        # First color gets base_thickness + step_height
-        # Each subsequent color gets an additional step_height
-        height = base_thickness + (i + 1) * step_height
-        color_height_map[color] = round(height, 2)
+    for color, luminance in color_luminance:
+        # Normalize luminance to [0, 1]
+        normalized = (luminance - y_min) / (y_max - y_min)
+        
+        # Apply mode: darker higher or lighter higher
+        if "深色凸起" in mode or "Darker Higher" in mode:
+            # Darker colors (lower luminance) should be higher
+            # Invert the ratio: 0 -> 1, 1 -> 0
+            ratio = 1.0 - normalized
+        else:
+            # Lighter colors (higher luminance) should be higher
+            # Keep the ratio as is: 0 -> 0, 1 -> 1
+            ratio = normalized
+        
+        # Calculate final height
+        height = base_thickness + ratio * delta_z
+        
+        # Round to 0.1mm precision
+        color_height_map[color] = round(height, 1)
     
-    print(f"[AUTO HEIGHT] Generated height map for {len(color_list)} colors")
+    print(f"[AUTO HEIGHT] Generated normalized height map for {len(color_list)} colors")
     print(f"[AUTO HEIGHT] Mode: {mode}")
-    print(f"[AUTO HEIGHT] Height range: {min(color_height_map.values()):.2f}mm - {max(color_height_map.values()):.2f}mm")
+    print(f"[AUTO HEIGHT] Luminance range: {y_min:.1f} - {y_max:.1f}")
+    print(f"[AUTO HEIGHT] Height range: {min(color_height_map.values()):.1f}mm - {max(color_height_map.values()):.1f}mm")
+    print(f"[AUTO HEIGHT] Total height span: {max(color_height_map.values()) - min(color_height_map.values()):.1f}mm")
     
     return color_height_map
 
