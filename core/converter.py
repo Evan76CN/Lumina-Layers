@@ -260,7 +260,8 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
                          add_loop, loop_width, loop_length, loop_hole, loop_pos,
                          modeling_mode=ModelingMode.VECTOR, quantize_colors=32,
                          blur_kernel=0, smooth_sigma=10,
-                         color_replacements=None, backing_color_id=0, separate_backing=False):
+                         color_replacements=None, backing_color_id=0, separate_backing=False,
+                         enable_relief=False, color_height_map=None):
     """
     Main conversion function: Convert image to 3D model.
     
@@ -557,9 +558,27 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
     # Step 5: Build Voxel Matrix
     # Error handling for backing layer marking (Requirement 8.2)
     try:
-        full_matrix, backing_metadata = _build_voxel_matrix(
-            material_matrix, mask_solid, spacer_thick, structure_mode, backing_color_id
-        )
+        # ========== 2.5D Relief Mode Support ==========
+        if enable_relief and color_height_map:
+            print(f"[CONVERTER] 🎨 2.5D Relief Mode ENABLED")
+            print(f"[CONVERTER] Color height map: {color_height_map}")
+            
+            # Build relief voxel matrix with per-color heights
+            full_matrix, backing_metadata = _build_relief_voxel_matrix(
+                matched_rgb=matched_rgb,
+                material_matrix=material_matrix,
+                mask_solid=mask_solid,
+                color_height_map=color_height_map,
+                default_height=spacer_thick,
+                structure_mode=structure_mode,
+                backing_color_id=backing_color_id,
+                pixel_scale=pixel_scale
+            )
+        else:
+            # Original flat voxel matrix
+            full_matrix, backing_metadata = _build_voxel_matrix(
+                material_matrix, mask_solid, spacer_thick, structure_mode, backing_color_id
+            )
         
         total_layers = full_matrix.shape[0]
         print(f"[CONVERTER] Voxel matrix: {full_matrix.shape} (Z×H×W)")
@@ -867,6 +886,197 @@ def _draw_loop_on_preview(preview_rgba, loop_info, color_conf, pixel_scale):
     )
     
     return np.array(preview_pil)
+
+
+def calculate_luminance(hex_color):
+    """
+    Calculate relative luminance of a color using standard formula.
+    
+    Formula: Y = 0.299*R + 0.587*G + 0.114*B
+    
+    Args:
+        hex_color: Color in hex format (e.g., '#ff0000')
+    
+    Returns:
+        float: Luminance value (0-255)
+    """
+    # Remove '#' if present
+    hex_color = hex_color.lstrip('#')
+    
+    # Convert hex to RGB
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    
+    # Calculate luminance using standard formula
+    luminance = 0.299 * r + 0.587 * g + 0.114 * b
+    
+    return luminance
+
+
+def generate_auto_height_map(color_list, mode, base_thickness, step_height):
+    """
+    Generate automatic height mapping based on color luminance.
+    
+    This function calculates the luminance of each color and assigns heights
+    in a stepped manner, creating a relief effect where darker or lighter
+    colors are elevated.
+    
+    Args:
+        color_list: List of hex color strings (e.g., ['#ff0000', '#00ff00'])
+        mode: Sorting mode - "深色凸起" (darker higher) or "浅色凸起" (lighter higher)
+        base_thickness: Base thickness in mm (minimum height)
+        step_height: Height increment per step in mm
+    
+    Returns:
+        dict: Color-to-height mapping {hex_color: height_mm}
+    
+    Example:
+        >>> colors = ['#ff0000', '#00ff00', '#0000ff']
+        >>> generate_auto_height_map(colors, "深色凸起", 1.2, 0.2)
+        {'#0000ff': 1.4, '#ff0000': 1.6, '#00ff00': 1.8}
+    """
+    if not color_list:
+        return {}
+    
+    # Calculate luminance for each color
+    color_luminance = []
+    for color in color_list:
+        luminance = calculate_luminance(color)
+        color_luminance.append((color, luminance))
+    
+    # Sort by luminance
+    if "深色凸起" in mode or "Darker Higher" in mode:
+        # Darker colors (lower luminance) should be higher
+        # Sort descending: brightest first (lowest height), darkest last (highest height)
+        color_luminance.sort(key=lambda x: x[1], reverse=True)  # Descending luminance
+    else:
+        # Lighter colors (higher luminance) should be higher
+        # Sort ascending: darkest first (lowest height), brightest last (highest height)
+        color_luminance.sort(key=lambda x: x[1])  # Ascending luminance
+    
+    # Assign heights with stepped increments
+    color_height_map = {}
+    for i, (color, luminance) in enumerate(color_luminance):
+        # First color gets base_thickness + step_height
+        # Each subsequent color gets an additional step_height
+        height = base_thickness + (i + 1) * step_height
+        color_height_map[color] = round(height, 2)
+    
+    print(f"[AUTO HEIGHT] Generated height map for {len(color_list)} colors")
+    print(f"[AUTO HEIGHT] Mode: {mode}")
+    print(f"[AUTO HEIGHT] Height range: {min(color_height_map.values()):.2f}mm - {max(color_height_map.values()):.2f}mm")
+    
+    return color_height_map
+
+
+def _build_relief_voxel_matrix(matched_rgb, material_matrix, mask_solid, color_height_map,
+                               default_height, structure_mode, backing_color_id, pixel_scale):
+    """
+    Build 2.5D relief voxel matrix with per-color variable heights.
+    
+    This function creates a voxel matrix where different colors have different Z heights,
+    while preserving the top 5 layers (0.4mm) for optical color mixing.
+    
+    Physical Model:
+    - Each color region has its own target height (Target_Z)
+    - Bottom layers (base): Z=0 to Z=(Target_Z - 0.4mm) - filled with backing_color_id
+    - Top layers (optical): Z=(Target_Z - 0.4mm) to Z=Target_Z - filled with material layers
+    
+    Args:
+        matched_rgb: (H, W, 3) RGB color array after K-Means matching
+        material_matrix: (H, W, 5) material matrix for optical layers
+        mask_solid: (H, W) boolean mask of solid pixels
+        color_height_map: dict mapping hex colors to heights in mm
+                         e.g., {'#ff0000': 4.0, '#00ff00': 2.5}
+        default_height: default height in mm for colors not in map
+        structure_mode: "Double-sided" or "Single-sided"
+        backing_color_id: backing material ID (0-7)
+        pixel_scale: mm per pixel
+    
+    Returns:
+        tuple: (full_matrix, backing_metadata)
+            - full_matrix: (Z, H, W) voxel matrix with variable heights
+            - backing_metadata: dict with backing info
+    """
+    target_h, target_w = material_matrix.shape[:2]
+    
+    # Constants
+    OPTICAL_LAYERS = 5
+    OPTICAL_THICKNESS_MM = OPTICAL_LAYERS * PrinterConfig.LAYER_HEIGHT  # 0.4mm
+    
+    print(f"[RELIEF] Building 2.5D relief voxel matrix...")
+    print(f"[RELIEF] Optical layer thickness: {OPTICAL_THICKNESS_MM}mm ({OPTICAL_LAYERS} layers)")
+    
+    # Step 1: Create color-to-height mapping for each pixel
+    # Convert matched_rgb to hex colors
+    height_matrix = np.full((target_h, target_w), default_height, dtype=np.float32)
+    
+    for y in range(target_h):
+        for x in range(target_w):
+            if not mask_solid[y, x]:
+                continue
+            
+            r, g, b = matched_rgb[y, x]
+            hex_color = f'#{r:02x}{g:02x}{b:02x}'
+            
+            if hex_color in color_height_map:
+                height_matrix[y, x] = color_height_map[hex_color]
+    
+    # Step 2: Calculate max height to determine total Z layers
+    max_height_mm = np.max(height_matrix[mask_solid]) if np.any(mask_solid) else default_height
+    max_z_layers = max(OPTICAL_LAYERS + 1, int(np.ceil(max_height_mm / PrinterConfig.LAYER_HEIGHT)))
+    
+    print(f"[RELIEF] Max height: {max_height_mm:.2f}mm ({max_z_layers} layers)")
+    print(f"[RELIEF] Height range: {np.min(height_matrix[mask_solid]):.2f}mm - {max_height_mm:.2f}mm")
+    
+    # Step 3: Initialize voxel matrix
+    full_matrix = np.full((max_z_layers, target_h, target_w), -1, dtype=int)
+    
+    # Step 4: Fill voxel matrix pixel by pixel
+    for y in range(target_h):
+        for x in range(target_w):
+            if not mask_solid[y, x]:
+                continue
+            
+            # Get target height for this pixel
+            target_height_mm = height_matrix[y, x]
+            target_z_layers = int(np.ceil(target_height_mm / PrinterConfig.LAYER_HEIGHT))
+            target_z_layers = max(OPTICAL_LAYERS, min(target_z_layers, max_z_layers))
+            
+            # Calculate base and optical layer ranges
+            optical_start_z = target_z_layers - OPTICAL_LAYERS
+            optical_end_z = target_z_layers
+            
+            # Fill base layers (Z=0 to optical_start_z) with backing color
+            for z in range(optical_start_z):
+                full_matrix[z, y, x] = backing_color_id
+            
+            # Fill optical layers (optical_start_z to optical_end_z) with material layers
+            # IMPORTANT: Reverse order - layer 0 should be at the bottom (观赏面朝上)
+            for layer_idx in range(OPTICAL_LAYERS):
+                z = optical_start_z + layer_idx
+                if z < max_z_layers:
+                    # Reverse: layer 0 (bottom) -> z=optical_start_z, layer 4 (top) -> z=optical_end_z-1
+                    mat_id = material_matrix[y, x, OPTICAL_LAYERS - 1 - layer_idx]
+                    full_matrix[z, y, x] = mat_id
+    
+    # Step 5: Relief mode is always single-sided (观赏面朝上)
+    # Double-sided mode doesn't make sense for relief - the viewing surface is on top
+    backing_z_range = (0, max_z_layers - OPTICAL_LAYERS - 1)
+    
+    backing_metadata = {
+        'backing_color_id': backing_color_id,
+        'backing_z_range': backing_z_range,
+        'is_relief': True,
+        'max_height_mm': max_height_mm
+    }
+    
+    print(f"[RELIEF] ✅ Relief voxel matrix built: {full_matrix.shape}")
+    print(f"[RELIEF] Backing range: Z={backing_z_range[0]} to Z={backing_z_range[1]}")
+    print(f"[RELIEF] Mode: Single-sided (viewing surface on top)")
+    
+    return full_matrix, backing_metadata
 
 
 def _build_voxel_matrix(material_matrix, mask_solid, spacer_thick, structure_mode, backing_color_id=0):
@@ -1378,7 +1588,7 @@ def generate_final_model(image_path, lut_path, target_width_mm, spacer_thick,
                         add_loop, loop_width, loop_length, loop_hole, loop_pos,
                         modeling_mode=ModelingMode.VECTOR, quantize_colors=64,
                         color_replacements=None, backing_color_name="White",
-                        separate_backing=False):
+                        separate_backing=False, enable_relief=False, color_height_map=None):
     """
     Wrapper function for generating final model.
     
@@ -1409,6 +1619,10 @@ def generate_final_model(image_path, lut_path, target_width_mm, spacer_thick,
         backing_color_id = color_conf['map'].get(backing_color_name, 0)
         print(f"[CONVERTER] Backing color: {backing_color_name} (ID={backing_color_id})")
     
+    # Handle relief mode parameters
+    if color_height_map is None:
+        color_height_map = {}
+    
     return convert_image_to_3d(
         image_path, lut_path, target_width_mm, spacer_thick,
         structure_mode, auto_bg, bg_tol, color_mode,
@@ -1418,7 +1632,9 @@ def generate_final_model(image_path, lut_path, target_width_mm, spacer_thick,
         smooth_sigma=10,
         color_replacements=color_replacements,
         backing_color_id=backing_color_id,
-        separate_backing=separate_backing  # 传递separate_backing参数
+        separate_backing=separate_backing,
+        enable_relief=enable_relief,
+        color_height_map=color_height_map
     )
 
 
