@@ -18,8 +18,8 @@ class I18n:
             'en': '✨ Lumina Studio'
         },
         'app_subtitle': {
-            'zh': '多材料3D打印色彩系统 | v1.5.7',
-            'en': 'Multi-Material 3D Print Color System | v1.5.7'
+            'zh': '多材料3D打印色彩系统 | v1.5.8',
+            'en': 'Multi-Material 3D Print Color System | v1.5.8'
         },
         'lang_btn_zh': {
             'zh': '🌐 中文',
@@ -676,7 +676,7 @@ class I18n:
         
         # ==================== About Page Content ====================
         'about_content': {
-            'zh': """## 🌟 Lumina Studio v1.5.7
+            'zh': """## 🌟 Lumina Studio v1.5.8
 
 **多材料3D打印色彩系统**
 
@@ -710,7 +710,7 @@ class I18n:
 
 ---
 
-### 📝 v1.5.7 更新日志
+### 📝 v1.5.8 更新日志
 
 #### 🧹 代码清理
 - 移除融合LUT功能（简化用户体验）
@@ -827,10 +827,10 @@ class I18n:
 
 <div style="text-align:center; color:#888; margin-top:20px;">
     Made with ❤️ by [MIN]<br>
-    v1.5.7 | 2025
+    v1.5.8 | 2025
 </div>
 """,
-            'en': """## 🌟 Lumina Studio v1.5.7
+            'en': """## 🌟 Lumina Studio v1.5.8
 
 **Multi-Material 3D Print Color System**
 
@@ -864,7 +864,7 @@ Accurate color reproduction for FDM printing
 
 ---
 
-### 📝 v1.5.7 Changelog
+### 📝 v1.5.8 Changelog
 
 #### 🧹 Code Cleanup
 - Removed merged LUT feature (simplified UX)
@@ -981,7 +981,7 @@ Special thanks to:
 
 <div style="text-align:center; color:#888; margin-top:20px;">
     Made with ❤️ by [MIN]<br>
-    v1.5.7 | 2025
+    v1.5.8 | 2025
 </div>
 """
         },
