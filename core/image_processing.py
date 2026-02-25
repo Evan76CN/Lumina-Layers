@@ -42,6 +42,7 @@ class LuminaImageProcessor:
         self.lut_rgb = None
         self.ref_stacks = None
         self.kdtree = None
+        self.enable_cleanup = True  # 默认开启孤立像素清理
         
         self._load_lut(lut_path)
     
@@ -412,6 +413,16 @@ class LuminaImageProcessor:
             matched_rgb, material_matrix, bg_reference = self._process_pixel_mode(
                 rgb_arr, target_h, target_w
             )
+        
+        # >>> 孤立像素清理（可选后处理）<<<
+        if modeling_mode == ModelingMode.HIGH_FIDELITY and self.enable_cleanup:
+            try:
+                from core.isolated_pixel_cleanup import cleanup_isolated_pixels
+                matched_rgb, material_matrix = cleanup_isolated_pixels(
+                    material_matrix, matched_rgb, self.lut_rgb, self.ref_stacks
+                )
+            except ImportError:
+                print("[IMAGE_PROCESSOR] ⚠️ isolated_pixel_cleanup module not found, skipping")
         
         # Background removal - combine alpha transparency with optional auto-bg
         mask_transparent = mask_transparent_initial.copy()
