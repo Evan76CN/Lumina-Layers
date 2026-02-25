@@ -1474,7 +1474,7 @@ def render_preview(preview_rgba, loop_pos, loop_width, loop_length,
     label_color = (80, 80, 100, 255)
     try:
         font = ImageFont.load_default()
-    except:
+    except Exception:
         font = None
     
     for i, x in enumerate(range(margin, canvas_w, main_step)):

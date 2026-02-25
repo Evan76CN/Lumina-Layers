@@ -32,7 +32,7 @@ class LuminaTray:
             if lang:
                 return lang.split('_')[0].lower()
             return 'en'
-        except:
+        except Exception:
             return 'en'
         
     def _get_text(self, key):
