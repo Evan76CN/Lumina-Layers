@@ -12,6 +12,59 @@ from typing import List
 from core.i18n import I18n
 
 
+def build_hue_filter_bar_html(lang: str = "zh") -> str:
+    """Build the hue filter button bar HTML (shared by swatch, card, and palette grids)."""
+    hue_labels = [
+        ('all',     I18n.get('lut_grid_hue_all', lang),     '#666'),
+        ('red',     I18n.get('lut_grid_hue_red', lang),     '#e53935'),
+        ('orange',  I18n.get('lut_grid_hue_orange', lang),  '#fb8c00'),
+        ('yellow',  I18n.get('lut_grid_hue_yellow', lang),  '#fdd835'),
+        ('green',   I18n.get('lut_grid_hue_green', lang),   '#43a047'),
+        ('cyan',    I18n.get('lut_grid_hue_cyan', lang),    '#00acc1'),
+        ('blue',    I18n.get('lut_grid_hue_blue', lang),    '#1e88e5'),
+        ('purple',  I18n.get('lut_grid_hue_purple', lang),  '#8e24aa'),
+        ('neutral', I18n.get('lut_grid_hue_neutral', lang), '#9e9e9e'),
+        ('fav',     I18n.get('lut_grid_hue_fav', lang),     '#ffc107'),
+    ]
+    parts = ['<div id="lut-hue-filter-bar" style="display:flex; flex-wrap:wrap; gap:3px; margin-bottom:8px;">']
+    for hue_key, hue_label, hue_color in hue_labels:
+        active_style = "background:#333; color:#fff; border-color:#333;" if hue_key == 'all' else ""
+        if hue_key == 'all':
+            dot = ''
+        elif hue_key == 'neutral':
+            # Neutral dot needs a border to be visible against light backgrounds
+            dot = f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:{hue_color};border:1px solid #666;margin-right:2px;"></span>'
+        elif hue_key == 'fav':
+            dot = ''  # The star emoji is already in the label
+        else:
+            dot = f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:{hue_color};margin-right:2px;"></span>'
+        # Use a unified JS dispatcher that works for both swatch and card modes
+        parts.append(
+            f'<button class="lut-hue-btn" data-hue="{hue_key}" '
+            f'onclick="window.lutHueDispatch && window.lutHueDispatch(\'{hue_key}\', this)" '
+            f'style="padding:2px 8px; border:1px solid #ccc; border-radius:10px; background:#f5f5f5; '
+            f'cursor:pointer; font-size:10px; {active_style}">{dot}{hue_label}</button>'
+        )
+    parts.append('</div>')
+    return ''.join(parts)
+
+
+def build_search_bar_html(lang: str = "zh") -> str:
+    """Build the search input bar HTML (shared by swatch and card grids)."""
+    search_placeholder = I18n.get('lut_grid_search_hex_placeholder', lang)
+    search_clear = I18n.get('lut_grid_search_clear', lang)
+    return f'''<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+        <span style="font-size:12px; color:#666;">🔍</span>
+        <input type="text" id="lut-color-search" placeholder="{search_placeholder}"
+               style="flex:1; padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:11px; outline:none;"
+               oninput="window.lutSearchDispatch && window.lutSearchDispatch(this.value)"
+               onfocus="this.style.borderColor='#2196F3'"
+               onblur="this.style.borderColor='#ddd'" />
+        <button onclick="document.getElementById('lut-color-search').value=''; window.lutSearchDispatch && window.lutSearchDispatch('');"
+                style="padding:4px 10px; border:1px solid #ddd; border-radius:6px; background:#f5f5f5; cursor:pointer; font-size:10px;">{search_clear}</button>
+    </div>'''
+
+
 def generate_palette_html(palette: List[dict], replacements: dict = None, selected_color: str = None, lang: str = "zh") -> str:
     """
     Generate HTML display for color palette with clickable swatches.
@@ -118,53 +171,12 @@ def generate_lut_color_grid_html(colors: List[dict], selected_color: str = None,
             not_used.append(entry)
     
     count_text = I18n.get('lut_grid_count', lang).format(count=len(colors))
-    search_placeholder = I18n.get('lut_grid_search_hex_placeholder', lang)
-    search_clear = I18n.get('lut_grid_search_clear', lang)
-
-    # Hue filter labels
-    hue_labels = [
-        ('all',     I18n.get('lut_grid_hue_all', lang),     '#666'),
-        ('red',     I18n.get('lut_grid_hue_red', lang),     '#e53935'),
-        ('orange',  I18n.get('lut_grid_hue_orange', lang),  '#fb8c00'),
-        ('yellow',  I18n.get('lut_grid_hue_yellow', lang),  '#fdd835'),
-        ('green',   I18n.get('lut_grid_hue_green', lang),   '#43a047'),
-        ('cyan',    I18n.get('lut_grid_hue_cyan', lang),    '#00acc1'),
-        ('blue',    I18n.get('lut_grid_hue_blue', lang),    '#1e88e5'),
-        ('purple',  I18n.get('lut_grid_hue_purple', lang),  '#8e24aa'),
-        ('neutral', I18n.get('lut_grid_hue_neutral', lang), '#9e9e9e'),
-    ]
 
     html_parts = [
         f'<p style="color:#666; font-size:12px; margin-bottom:8px;">{count_text}: <span id="lut-color-visible-count">{len(colors)}</span></p>',
-        # Search box
-        f'''
-        <div style="margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-            <span style="font-size:12px; color:#666;">🔍</span>
-            <input type="text" id="lut-color-search" placeholder="{search_placeholder}" 
-                   style="flex:1; padding:8px 12px; border:1px solid #ddd; border-radius:6px; font-size:12px; outline:none; transition: border-color 0.2s;"
-                   oninput="window.lutSmartSearch && window.lutSmartSearch(this.value)"
-                   onfocus="this.style.borderColor='#2196F3'"
-                   onblur="this.style.borderColor='#ddd'" />
-            <button onclick="document.getElementById('lut-color-search').value=''; window.lutSmartSearch && window.lutSmartSearch('');" 
-                    style="padding:6px 12px; border:1px solid #ddd; border-radius:6px; background:#f5f5f5; cursor:pointer; font-size:11px; transition: background 0.2s;"
-                    onmouseover="this.style.background='#e0e0e0'"
-                    onmouseout="this.style.background='#f5f5f5'">{search_clear}</button>
-        </div>
-        ''',
-        # Hue filter bar
-        '<div id="lut-hue-filter-bar" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px;">',
+        build_search_bar_html(lang),
+        build_hue_filter_bar_html(lang),
     ]
-    for hue_key, hue_label, hue_color in hue_labels:
-        active_style = "background:#333; color:#fff; border-color:#333;" if hue_key == 'all' else ""
-        dot = f'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{hue_color};margin-right:3px;"></span>' if hue_key != 'all' else ''
-        html_parts.append(
-            f'<button class="lut-hue-btn" data-hue="{hue_key}" '
-            f'onclick="window.lutFilterByHue && window.lutFilterByHue(\'{hue_key}\', this)" '
-            f'style="padding:3px 10px; border:1px solid #ccc; border-radius:12px; background:#f5f5f5; '
-            f'cursor:pointer; font-size:11px; transition: all 0.15s; {active_style}">'
-            f'{dot}{hue_label}</button>'
-        )
-    html_parts.append('</div>')
 
     html_parts.append('<div id="lut-color-grid-container" style="max-height:400px; overflow-y:auto; padding:4px;">')
     

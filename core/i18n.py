@@ -742,6 +742,10 @@ class I18n:
             'zh': '中性色',
             'en': 'Neutral'
         },
+        'lut_grid_hue_fav': {
+            'zh': '⭐ 收藏',
+            'en': '⭐ Favorites'
+        },
         'lut_grid_search_hex_placeholder': {
             'zh': '输入 Hex 或 RGB 搜索定位 (如 #FF0000 或 255,0,0)',
             'en': 'Search by Hex or RGB (e.g. #FF0000 or 255,0,0)'

@@ -2915,47 +2915,19 @@ def generate_lut_grid_html(lut_path, lang: str = "zh"):
             return 'purple'
         return 'neutral'
 
-    search_placeholder = I18n.get('lut_grid_search_hex_placeholder', lang)
-    search_clear = I18n.get('lut_grid_search_clear', lang)
+    from ui.palette_extension import build_search_bar_html, build_hue_filter_bar_html
 
-    # Hue filter labels
-    hue_labels = [
-        ('all',     I18n.get('lut_grid_hue_all', lang),     '#666'),
-        ('red',     I18n.get('lut_grid_hue_red', lang),     '#e53935'),
-        ('orange',  I18n.get('lut_grid_hue_orange', lang),  '#fb8c00'),
-        ('yellow',  I18n.get('lut_grid_hue_yellow', lang),  '#fdd835'),
-        ('green',   I18n.get('lut_grid_hue_green', lang),   '#43a047'),
-        ('cyan',    I18n.get('lut_grid_hue_cyan', lang),    '#00acc1'),
-        ('blue',    I18n.get('lut_grid_hue_blue', lang),    '#1e88e5'),
-        ('purple',  I18n.get('lut_grid_hue_purple', lang),  '#8e24aa'),
-        ('neutral', I18n.get('lut_grid_hue_neutral', lang), '#9e9e9e'),
-    ]
+    # Derive LUT key for favorites persistence
+    _lut_key = os.path.splitext(os.path.basename(lut_path))[0] if lut_path else ''
 
     html = f"""
     <div class="lut-grid-container">
         <div style="margin-bottom: 8px; font-size: 12px; color: #666;">
             {I18n.get('lut_grid_count', lang).format(count=count)}: <span id="lut-color-visible-count">{count}</span>
         </div>
-        <div style="margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-            <span style="font-size:12px; color:#666;">🔍</span>
-            <input type="text" id="lut-color-search" placeholder="{search_placeholder}"
-                   style="flex:1; padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:11px; outline:none;"
-                   oninput="window.lutSmartSearch && window.lutSmartSearch(this.value)"
-                   onfocus="this.style.borderColor='#2196F3'"
-                   onblur="this.style.borderColor='#ddd'" />
-            <button onclick="document.getElementById('lut-color-search').value=''; window.lutSmartSearch && window.lutSmartSearch('');"
-                    style="padding:4px 10px; border:1px solid #ddd; border-radius:6px; background:#f5f5f5; cursor:pointer; font-size:10px;">{search_clear}</button>
-        </div>
-        <div id="lut-hue-filter-bar" style="display:flex; flex-wrap:wrap; gap:3px; margin-bottom:8px;">
-    """
-    for hue_key, hue_label, hue_color in hue_labels:
-        active_style = "background:#333; color:#fff; border-color:#333;" if hue_key == 'all' else ""
-        dot = f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:{hue_color};margin-right:2px;"></span>' if hue_key != 'all' else ''
-        html += f'<button class="lut-hue-btn" data-hue="{hue_key}" onclick="window.lutFilterByHue && window.lutFilterByHue(\'{hue_key}\', this)" style="padding:2px 8px; border:1px solid #ccc; border-radius:10px; background:#f5f5f5; cursor:pointer; font-size:10px; {active_style}">{dot}{hue_label}</button>'
-
-    html += """
-        </div>
-        <div id="lut-color-grid-container" style="
+        {build_search_bar_html(lang)}
+        {build_hue_filter_bar_html(lang)}
+        <div id="lut-color-grid-container" data-lut-key="{_lut_key}" style="
             display: flex;
             flex-wrap: wrap;
             gap: 4px;
@@ -3037,21 +3009,6 @@ def generate_lut_card_grid_html(lut_path, lang: str = "zh"):
             return 'purple'
         return 'neutral'
 
-    search_placeholder = I18n.get('lut_grid_search_hex_placeholder', lang)
-    search_clear = I18n.get('lut_grid_search_clear', lang)
-
-    hue_labels = [
-        ('all',     I18n.get('lut_grid_hue_all', lang),     '#666'),
-        ('red',     I18n.get('lut_grid_hue_red', lang),     '#e53935'),
-        ('orange',  I18n.get('lut_grid_hue_orange', lang),  '#fb8c00'),
-        ('yellow',  I18n.get('lut_grid_hue_yellow', lang),  '#fdd835'),
-        ('green',   I18n.get('lut_grid_hue_green', lang),   '#43a047'),
-        ('cyan',    I18n.get('lut_grid_hue_cyan', lang),    '#00acc1'),
-        ('blue',    I18n.get('lut_grid_hue_blue', lang),    '#1e88e5'),
-        ('purple',  I18n.get('lut_grid_hue_purple', lang),  '#8e24aa'),
-        ('neutral', I18n.get('lut_grid_hue_neutral', lang), '#9e9e9e'),
-    ]
-
     import math
     if total == 2738:
         half = total // 2
@@ -3070,35 +3027,20 @@ def generate_lut_card_grid_html(lut_path, lang: str = "zh"):
     cell = 18
     gap = 1
 
-    # Search bar
+    from ui.palette_extension import build_search_bar_html, build_hue_filter_bar_html
+
     html_parts = [
         f'<div style="margin-bottom:8px; font-size:12px; color:#666;">{I18n.get("lut_grid_count", lang).format(count=total)}: <span id="lut-color-visible-count">{total}</span></div>',
-        f'''<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-            <span style="font-size:12px; color:#666;">🔍</span>
-            <input type="text" id="lut-color-search" placeholder="{search_placeholder}"
-                   style="flex:1; padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:11px; outline:none;"
-                   oninput="window.lutCardSearch && window.lutCardSearch(this.value)"
-                   onfocus="this.style.borderColor='#2196F3'"
-                   onblur="this.style.borderColor='#ddd'" />
-            <button onclick="document.getElementById('lut-color-search').value=''; window.lutCardSearch && window.lutCardSearch('');"
-                    style="padding:4px 10px; border:1px solid #ddd; border-radius:6px; background:#f5f5f5; cursor:pointer; font-size:10px;">{search_clear}</button>
-        </div>''',
-        # Hue filter bar
-        '<div id="lut-hue-filter-bar" style="display:flex; flex-wrap:wrap; gap:3px; margin-bottom:8px;">',
+        build_search_bar_html(lang),
+        build_hue_filter_bar_html(lang),
     ]
-    for hue_key, hue_label, hue_color in hue_labels:
-        active_style = "background:#333; color:#fff; border-color:#333;" if hue_key == 'all' else ""
-        dot = f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:{hue_color};margin-right:2px;"></span>' if hue_key != 'all' else ''
-        html_parts.append(
-            f'<button class="lut-hue-btn" data-hue="{hue_key}" '
-            f'onclick="window.lutCardFilterByHue && window.lutCardFilterByHue(\'{hue_key}\', this)" '
-            f'style="padding:2px 8px; border:1px solid #ccc; border-radius:10px; background:#f5f5f5; cursor:pointer; font-size:10px; {active_style}">{dot}{hue_label}</button>'
-        )
-    html_parts.append('</div>')
+
+    # Derive LUT key for favorites persistence
+    _lut_key = os.path.splitext(os.path.basename(lut_path))[0] if lut_path else ''
 
     # Grid
     html_parts.append(
-        "<div id='lut-color-grid-container' style='display:flex; gap:12px; align-items:flex-start; "
+        f"<div id='lut-color-grid-container' data-lut-key='{_lut_key}' style='display:flex; gap:12px; align-items:flex-start; "
         "overflow-x:auto; padding:4px;'>"
     )
 
