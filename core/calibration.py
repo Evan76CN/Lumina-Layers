@@ -341,6 +341,10 @@ def generate_smart_board(block_size_mm=5.0, gap_mm=0.8):
     
     print(f"[SMART] Voxel matrix: {total_layers} x {voxel_h} x {voxel_w}")
     
+    # 约定转换：get_top_1296_colors() 返回底到顶约定 (stack[0]=背面, stack[4]=观赏面)
+    # 转换为顶到底约定 (stack[0]=观赏面, stack[4]=背面)，与 4 色模式统一
+    stacks = [tuple(reversed(s)) for s in stacks]
+    
     # Fill 1296 intelligent color blocks (with padding offset)
     for idx, stack in enumerate(stacks):
         # Data area logical coordinates (0..35)
@@ -354,11 +358,11 @@ def generate_smart_board(block_size_mm=5.0, gap_mm=0.8):
         px = col * (pixels_per_block + pixels_gap)
         py = row * (pixels_per_block + pixels_gap)
         
-        # Fill 5 color layers (note Z-axis reversal for Face Down mode)
-        # Z=0 (physical first layer) = viewing surface = stack[4] (top layer in simulation)
-        # Z=4 (physical fifth layer) = internal layer = stack[0] (bottom layer in simulation)
+        # Fill 5 color layers (直接映射，与 4 色模式一致)
+        # Z=0 (physical first layer) = viewing surface = stack[0] (顶到底约定)
+        # Z=4 (physical fifth layer) = internal layer = stack[4] (顶到底约定)
         for z in range(color_layers):
-            mat_id = stack[color_layers - 1 - z]
+            mat_id = stack[z]
             full_matrix[z, py:py+pixels_per_block, px:px+pixels_per_block] = mat_id
     
     # Set corner alignment markers (in outermost ring 0 and 37)
@@ -418,8 +422,12 @@ def generate_8color_board(page_index=0):
         all_stacks = np.load(path)
         print(f"[8COLOR] Loaded {len(all_stacks)} stacks from {path}")
         
-        # Debug: Check surface black count
-        surface_black = sum(1 for s in all_stacks if s[4] == 5)
+        # 约定转换：smart_8color_stacks.npy 存储底到顶约定 (stack[0]=背面, stack[4]=观赏面)
+        # 转换为顶到底约定 (stack[0]=观赏面, stack[4]=背面)，与 4 色模式统一
+        all_stacks = np.array([s[::-1] for s in all_stacks])
+        
+        # Debug: Check surface black count (转换后 stack[0] 为观赏面)
+        surface_black = sum(1 for s in all_stacks if s[0] == 5)
         print(f"[8COLOR] Surface black: {surface_black}/{len(all_stacks)} ({surface_black/len(all_stacks)*100:.2f}%)")
     except Exception as e: 
         print(f"[8COLOR] Error loading data: {e}")
@@ -448,12 +456,12 @@ def generate_8color_board(page_index=0):
         
         # Debug first few stacks
         if i < 3:
-            print(f"[8COLOR] Stack {i}: {stack} -> reversed: {stack[::-1]}")
+            print(f"[8COLOR] Stack {i} (顶到底): {stack}")
         
-        # Reverse stack for Face Down
-        # stack[0] = Layer 5 (背面) -> Z=4 (物理第5层)
-        # stack[4] = Layer 1 (正面) -> Z=0 (物理第1层，观赏面)
-        for z, mid in enumerate(stack[::-1]):
+        # 直接写入，与 4 色模式一致（已在加载时完成约定转换）
+        # stack[0] = 观赏面 -> Z=0 (物理第1层，观赏面)
+        # stack[4] = 背面   -> Z=4 (物理第5层)
+        for z, mid in enumerate(stack):
             full_matrix[z, py:py+px_blk, px:px+px_blk] = mid
 
     # 5. Set Corner Markers (Crucial for Page ID)

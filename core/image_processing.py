@@ -215,9 +215,10 @@ class LuminaImageProcessor:
             
             smart_stacks = np.load(stacks_path).tolist()
             
-            # Reverse stacking order for Face-Down printing
+            # 约定转换：smart_8color_stacks.npy 存储底到顶约定（stack[0]=背面），
+            # 转换为顶到底约定（stack[0]=观赏面, stack[4]=背面），与 4 色模式统一
             smart_stacks = [tuple(reversed(s)) for s in smart_stacks]
-            print("[IMAGE_PROCESSOR] Stacks reversed for Face-Down printing compatibility.")
+            print("[IMAGE_PROCESSOR] Stacks converted from bottom-to-top to top-to-bottom convention (matching 4-color mode).")
             
             if len(smart_stacks) != total_colors:
                 print(f"⚠️ Warning: Stacks count ({len(smart_stacks)}) != LUT count ({total_colors})")
@@ -237,8 +238,10 @@ class LuminaImageProcessor:
             from core.calibration import get_top_1296_colors
             
             smart_stacks = get_top_1296_colors()
+            # 约定转换：get_top_1296_colors() 返回底到顶约定（stack[0]=背面），
+            # 转换为顶到底约定（stack[0]=观赏面, stack[4]=背面），与 4 色模式统一
             smart_stacks = [tuple(reversed(s)) for s in smart_stacks]
-            print("[IMAGE_PROCESSOR] Stacks reversed for Face-Down printing compatibility.")
+            print("[IMAGE_PROCESSOR] Stacks converted from bottom-to-top to top-to-bottom convention (matching 4-color mode).")
             
             if len(smart_stacks) != total_colors:
                 print(f"⚠️ Warning: Stacks count ({len(smart_stacks)}) != LUT count ({total_colors})")
