@@ -846,7 +846,14 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
         try:
             # Outline thickness matches the full model height
             outline_thickness_mm = total_layers * PrinterConfig.LAYER_HEIGHT
-            print(f"[CONVERTER] 🔲 Generating outline: width={outline_width}mm, thickness={outline_thickness_mm}mm (matches model)")
+            # If coating is enabled, extend outline downward to cover coating layers
+            outline_z_offset = 0.0
+            if enable_coating:
+                coating_layers = max(1, int(round(coating_height_mm / PrinterConfig.LAYER_HEIGHT)))
+                coating_mm = coating_layers * PrinterConfig.LAYER_HEIGHT
+                outline_thickness_mm += coating_mm
+                outline_z_offset = -coating_mm
+            print(f"[CONVERTER] 🔲 Generating outline: width={outline_width}mm, thickness={outline_thickness_mm}mm (z_offset={outline_z_offset}mm)")
             
             outline_mesh = _generate_outline_mesh(
                 mask_solid=mask_solid,
@@ -857,6 +864,9 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             )
             
             if outline_mesh is not None:
+                # Shift outline down if coating is enabled
+                if outline_z_offset != 0.0:
+                    outline_mesh.vertices[:, 2] += outline_z_offset
                 # Outline is always white (material 0) as a standalone object
                 outline_mesh.visual.face_colors = preview_colors[0]
                 outline_name = "Outline"
