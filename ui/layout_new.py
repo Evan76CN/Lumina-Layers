@@ -1933,7 +1933,7 @@ def create_converter_tab_content(lang: str, lang_state=None, theme_state=None) -
             
             # Relief height slider (only visible when relief mode is enabled and a color is selected)
             components['slider_conv_relief_height'] = gr.Slider(
-                minimum=1.0,
+                minimum=0.08,
                 maximum=20.0,
                 value=1.2,
                 step=0.1,
