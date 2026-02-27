@@ -217,7 +217,9 @@ def save_modeling_mode(modeling_mode):
 
 import subprocess
 import platform
-import winreg
+
+if platform.system() == "Windows":
+    import winreg
 
 # Known slicer identifiers for registry matching
 _SLICER_KEYWORDS = {
@@ -233,7 +235,11 @@ def _scan_registry_for_slicers():
     """Scan Windows registry Uninstall keys to find slicer executables.
     
     Returns dict: {slicer_id: {"name": display_name, "exe": exe_path}}
+    Non-Windows platforms return empty dict.
     """
+    if platform.system() != "Windows":
+        return {}
+
     found = {}
     reg_paths = [
         (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
